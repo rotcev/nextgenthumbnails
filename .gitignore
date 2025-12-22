@@ -1,0 +1,56 @@
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Env files (keep examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Build outputs
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+build/
+**/build/
+coverage/
+**/coverage/
+
+# Vite / misc local files
+*.local
+
+# pnpm / tooling caches
+.pnpm-store/
+**/.pnpm-store/
+.turbo/
+**/.turbo/
+.cache/
+**/.cache/
+
+# Generated media/artifacts
+apps/api/storage/generations/
+apps/api/storage/generations/**
+
+

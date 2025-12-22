@@ -179,6 +179,26 @@ export function buildGenerationPrompt(args: {
           "",
           "TEMPLATE TEXT POSITIONING (FROM ANALYSIS, FOLLOW CLOSELY):",
           `- Block: centered=${analyzedTextLayout.block.centered}, widthPct=${analyzedTextLayout.block.widthPct}, heightPct=${analyzedTextLayout.block.heightPct}, leading=${analyzedTextLayout.block.leading}`,
+          ...(typeof analyzedTextLayout.block.topPct === "number" &&
+          typeof analyzedTextLayout.block.bottomPct === "number"
+            ? [
+                "",
+                "TEXT BLOCK VERTICAL EXTENTS (FROM ANALYSIS, CRITICAL):",
+                "- Measure is based on GLYPHS ONLY (ignore shadow/glow).",
+                `- Target: topmost glyph bound at ~${analyzedTextLayout.block.topPct}% of canvas height.`,
+                `- Target: bottommost glyph bound at ~${analyzedTextLayout.block.bottomPct}% of canvas height.`,
+                "- PRIORITY: match vertical extents (top/bottom) over fitting line width.",
+                "- If the user text is shorter (e.g. 'WP', 'OFF!!!'), DO NOT shrink font size. Allow extra horizontal whitespace instead.",
+                "- Keep top and bottom margins within ±2% of canvas height compared to the template.",
+                "- Do NOT vertically shrink the text block to create extra empty space.",
+                "- If there is any ambiguity, push the bottom line DOWN to match the target bottomPct (do not leave extra padding).",
+                ...(analyzedTextLayout.block.bottomPct >= 96
+                  ? [
+                      "- This template is near full-height: the bottom of the last line should be essentially flush with the bottom edge (0–1% margin).",
+                    ]
+                  : []),
+              ]
+            : []),
           ...analyzedTextLayout.regions.map(
             (r) =>
               `- Line ${r.index}: fillColor=${r.fillColor}; position=${r.position}; size=${r.relativeSize}; notes=${r.notes}`,
@@ -281,7 +301,14 @@ function replaceAllLoose(haystack: string, needle: string, replacement: string) 
 }
 
 function coerceAnalyzedTextLayout(value: unknown): {
-  block: { centered: boolean; widthPct: number; heightPct: number; leading: string };
+  block: {
+    centered: boolean;
+    widthPct: number;
+    heightPct: number;
+    topPct?: number;
+    bottomPct?: number;
+    leading: string;
+  };
   regions: Array<{
     index: number;
     position: string;
@@ -298,8 +325,21 @@ function coerceAnalyzedTextLayout(value: unknown): {
   const centered = Boolean((block as any).centered);
   const widthPct = Number((block as any).widthPct);
   const heightPct = Number((block as any).heightPct);
+  const topPctRaw = (block as any).topPct;
+  const bottomPctRaw = (block as any).bottomPct;
   const leading = String((block as any).leading ?? "").trim();
   if (!Number.isFinite(widthPct) || !Number.isFinite(heightPct) || !leading) return null;
+
+  const topPct =
+    typeof topPctRaw === "number" && Number.isFinite(topPctRaw) ? topPctRaw : undefined;
+  const bottomPct =
+    typeof bottomPctRaw === "number" && Number.isFinite(bottomPctRaw) ? bottomPctRaw : undefined;
+  const hasExtents =
+    typeof topPct === "number" &&
+    typeof bottomPct === "number" &&
+    topPct >= 0 &&
+    bottomPct <= 100 &&
+    topPct < bottomPct;
 
   const outRegions = regions
     .map((r: any) => {
@@ -323,7 +363,13 @@ function coerceAnalyzedTextLayout(value: unknown): {
   if (!outRegions.length) return null;
 
   return {
-    block: { centered, widthPct, heightPct, leading },
+    block: {
+      centered,
+      widthPct,
+      heightPct,
+      ...(hasExtents ? { topPct, bottomPct } : null),
+      leading,
+    },
     regions: outRegions,
   };
 }

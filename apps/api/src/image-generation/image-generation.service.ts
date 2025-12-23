@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
@@ -20,6 +20,7 @@ type GenerateArgs = {
 @Injectable()
 export class ImageGenerationService {
   private readonly openai?: OpenAI;
+  private readonly logger = new Logger(ImageGenerationService.name);
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -30,6 +31,27 @@ export class ImageGenerationService {
     if (!this.openai) {
       throw new Error('OPENAI_API_KEY is not set');
     }
+
+    const startMs = Date.now();
+    const imgNames = [
+      basename(args.templateImageAbsPath),
+      ...args.subjectImageAbsPaths.map((p) => basename(p)),
+    ];
+    this.logger.log(
+      [
+        'openai:images.edit:start',
+        `model=${args.model}`,
+        `size=${args.size}`,
+        `quality=${args.quality}`,
+        `inputFidelity=${args.inputFidelity}`,
+        `outputFormat=${args.outputFormat}`,
+        `images=${imgNames.length}(${imgNames.join(',')})`,
+        args.maskImageAbsPath ? `mask=${basename(args.maskImageAbsPath)}` : null,
+        `promptLen=${args.prompt.length}`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
 
     // IMPORTANT: Use OpenAI's `toFile` helper so the SDK sends multipart parts with a filename
     // and correct Content-Type. Passing a raw stream can end up as application/octet-stream.
@@ -56,23 +78,53 @@ export class ImageGenerationService {
         )
       : undefined;
 
-    const res = await this.openai.images.edit({
-      model: args.model,
-      image: images as any,
-      ...(maskFile ? { mask: maskFile as any } : null),
-      prompt: args.prompt,
-      size: apiSize(args.size) as any,
-      quality: args.quality as any,
-      input_fidelity: args.inputFidelity as any,
-      output_format: args.outputFormat as any,
-    });
+    try {
+      const res = await this.openai.images.edit({
+        model: args.model,
+        image: images as any,
+        ...(maskFile ? { mask: maskFile as any } : null),
+        prompt: args.prompt,
+        size: apiSize(args.size) as any,
+        quality: args.quality as any,
+        input_fidelity: args.inputFidelity as any,
+        output_format: args.outputFormat as any,
+      });
 
-    const b64 = (res.data?.[0] as any)?.b64_json as string | undefined;
-    if (!b64) {
-      throw new Error('OpenAI did not return b64_json image data');
+      const b64 = (res.data?.[0] as any)?.b64_json as string | undefined;
+      if (!b64) {
+        throw new Error('OpenAI did not return b64_json image data');
+      }
+
+      const out = Buffer.from(b64, 'base64');
+      this.logger.log(
+        [
+          'openai:images.edit:success',
+          `bytes=${out.length}`,
+          `ms=${Date.now() - startMs}`,
+        ].join(' '),
+      );
+      return out;
+    } catch (err: any) {
+      const code = String(err?.code ?? err?.error?.code ?? '').trim();
+      const requestId = String(
+        err?.requestID ??
+          err?.error?.requestID ??
+          err?.headers?.get?.('x-request-id') ??
+          '',
+      ).trim();
+      const msg = String(err?.error?.message ?? err?.message ?? '').trim();
+      this.logger.error(
+        [
+          'openai:images.edit:error',
+          requestId ? `requestId=${requestId}` : null,
+          code ? `code=${code}` : null,
+          msg ? `message=${msg}` : null,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+      throw err;
     }
-
-    return Buffer.from(b64, 'base64');
   }
 }
 

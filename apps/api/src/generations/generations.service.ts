@@ -9,6 +9,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -29,6 +30,8 @@ import { buildEditMaskPng } from '../image-generation/mask-builder';
 
 @Injectable()
 export class GenerationsService {
+  private readonly logger = new Logger(GenerationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -49,7 +52,16 @@ export class GenerationsService {
     dto: CreateGenerationDto,
     subjectImages: Express.Multer.File[],
   ) {
+    const startMs = Date.now();
     await this.assertClientOwned(clientId);
+    this.logger.log(
+      [
+        'generation:start',
+        `clientId=${clientId}`,
+        `templateId=${dto.templateId}`,
+        `subjectImages=${subjectImages.length}`,
+      ].join(' '),
+    );
 
     const template = await this.prisma.template.findFirst({
       where: { id: dto.templateId, clientId },
@@ -63,6 +75,15 @@ export class GenerationsService {
     const texts = safeJsonParseTexts(dto.textsJson);
     const customizations = safeJsonParseObject(dto.customizationsJson);
     const userNotes = sanitizeUserNotes(dto.userNotes);
+    this.logger.log(
+      [
+        'generation:inputs',
+        `subjectSlotIds=[${subjectSlotIds.join(',') || '(none)'}]`,
+        `texts=[${texts.map((t) => t.key).join(',') || '(none)'}]`,
+        `customizations=${Object.keys(customizations).length}`,
+        `userNotes=${userNotes ? 'yes' : 'no'}`,
+      ].join(' '),
+    );
 
     const templateConfig = (template.config as any) ?? {};
     const knownSlotIds = new Set<string>(
@@ -174,16 +195,39 @@ export class GenerationsService {
         }),
       },
     });
+    this.logger.log(
+      [
+        'generation:created',
+        `generationId=${generation.id}`,
+        `status=${generation.status}`,
+      ].join(' '),
+    );
 
     try {
       const templateAbsPath = resolveStorageAbsPath(template.imageUrl);
       await readFile(templateAbsPath); // fail fast if missing
+      this.logger.log(
+        [
+          'generation:templateResolved',
+          `generationId=${generation.id}`,
+          `templateAbsPath=${templateAbsPath}`,
+          `isSpecial=${Boolean((template as any).isSpecial)}`,
+        ].join(' '),
+      );
 
       const subjectAbsPaths: string[] = [];
       const subjectAbsPathBySlotId = new Map<string, string>();
       for (let i = 0; i < subjectImages.length; i++) {
         const slotId = subjectSlotIds[i];
         const file = subjectImages[i];
+        this.logger.log(
+          [
+            'generation:saveSubject',
+            `generationId=${generation.id}`,
+            `slotId=${slotId}`,
+            `bytes=${file?.buffer?.length ?? 0}`,
+          ].join(' '),
+        );
         const enhancedBytes = await enhanceSubjectImageBytes(file.buffer);
         const saved = await this.storage.saveTempSubjectImage(
           generation.id,
@@ -235,12 +279,30 @@ export class GenerationsService {
         generation.id,
         bytes,
       );
+      this.logger.log(
+        [
+          'generation:succeeded',
+          `generationId=${generation.id}`,
+          `outputUrl=${saved.urlPath}`,
+          `ms=${Date.now() - startMs}`,
+        ].join(' '),
+      );
 
       return await this.prisma.generation.update({
         where: { id: generation.id },
         data: { status: 'succeeded', outputUrl: saved.urlPath },
       });
     } catch (err) {
+      const msg = String((err as any)?.message ?? err ?? '').trim();
+      this.logger.error(
+        [
+          'generation:failed',
+          `generationId=${generation.id}`,
+          msg ? `message=${msg}` : null,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
       await this.prisma.generation.update({
         where: { id: generation.id },
         data: { status: 'failed' },
@@ -280,6 +342,16 @@ export class GenerationsService {
 
     const bgAbs = subjectAbsPathBySlotId.get('background') ?? null;
     const mainAbs = subjectAbsPathBySlotId.get('main') ?? null;
+    this.logger.log(
+      [
+        'special:start',
+        `generationId=${generationId}`,
+        `hasBg=${bgAbs ? 'yes' : 'no'}`,
+        `hasMain=${mainAbs ? 'yes' : 'no'}`,
+        `texts=${texts.length}`,
+        `polygons=${polygons.length}`,
+      ].join(' '),
+    );
 
     let currentBaseAbsPath = await this.ensureSpecialBase1536x1024({
       generationId,
@@ -296,6 +368,12 @@ export class GenerationsService {
 
     // 1) Background pass
     if (bgAbs && availableLabels.includes('background')) {
+      const passStart = Date.now();
+      this.logger.log(`special:passStart generationId=${generationId} pass=background`);
+      const bgRefAbs = await this.buildSpecialBackgroundReference1536x1024({
+        generationId,
+        backgroundAbsPath: bgAbs,
+      });
       const { width, height } =
         await readImageDimensionsOrThrow(currentBaseAbsPath);
       const maskBytes = await buildEditMaskPng({
@@ -308,6 +386,9 @@ export class GenerationsService {
         generationId,
         'mask-background',
         maskBytes,
+      );
+      this.logger.log(
+        `special:maskSaved generationId=${generationId} pass=background absPath=${savedMask.absPath}`,
       );
       const prompt = buildSpecialBackgroundPassPrompt({ template, userNotes });
       const fallbackPrompt = buildSpecialBackgroundPassPrompt({
@@ -335,7 +416,7 @@ export class GenerationsService {
             quality: 'high',
             inputFidelity: 'high',
             templateImageAbsPath: currentBaseAbsPath,
-            subjectImageAbsPaths: [bgAbs],
+            subjectImageAbsPaths: [bgRefAbs, bgAbs],
             maskImageAbsPath: savedMask.absPath,
             outputFormat,
             moderation: 'low',
@@ -348,7 +429,7 @@ export class GenerationsService {
             quality: 'high',
             inputFidelity: 'high',
             templateImageAbsPath: currentBaseAbsPath,
-            subjectImageAbsPaths: [bgAbs],
+            subjectImageAbsPaths: [bgRefAbs, bgAbs],
             maskImageAbsPath: savedMask.absPath,
             outputFormat,
             moderation: 'low',
@@ -359,11 +440,16 @@ export class GenerationsService {
         'pass-1-background',
         currentBytes,
       );
+      this.logger.log(
+        `special:passEnd generationId=${generationId} pass=background absPath=${saved.absPath} ms=${Date.now() - passStart}`,
+      );
       currentBaseAbsPath = saved.absPath;
     }
 
     // 2) Main subject pass
     if (mainAbs && availableLabels.includes('main')) {
+      const passStart = Date.now();
+      this.logger.log(`special:passStart generationId=${generationId} pass=main`);
       const { width, height } =
         await readImageDimensionsOrThrow(currentBaseAbsPath);
       const maskBytes = await buildEditMaskPng({
@@ -376,6 +462,9 @@ export class GenerationsService {
         generationId,
         'mask-main',
         maskBytes,
+      );
+      this.logger.log(
+        `special:maskSaved generationId=${generationId} pass=main absPath=${savedMask.absPath}`,
       );
       const prompt = buildSpecialMainPassPrompt({ template, userNotes });
       const fallbackPrompt = buildSpecialMainPassPrompt({
@@ -427,11 +516,16 @@ export class GenerationsService {
         'pass-2-main',
         currentBytes,
       );
+      this.logger.log(
+        `special:passEnd generationId=${generationId} pass=main absPath=${saved.absPath} ms=${Date.now() - passStart}`,
+      );
       currentBaseAbsPath = saved.absPath;
     }
 
     // 3) Final text pass: \"Change the text to\" (single `text` polygon recommended; auto fallback if none)
     if (texts.length) {
+      const passStart = Date.now();
+      this.logger.log(`special:passStart generationId=${generationId} pass=text`);
       const [line1, line2] = extractTwoLineText(template, texts);
       const prompt = buildSpecialChangeTextPrompt({
         template,
@@ -461,10 +555,13 @@ export class GenerationsService {
             moderation: 'low',
           }),
       });
-      await this.storage.saveTempIntermediateImage(
+      const saved = await this.storage.saveTempIntermediateImage(
         generationId,
         'pass-3-text',
         currentBytes,
+      );
+      this.logger.log(
+        `special:passEnd generationId=${generationId} pass=text absPath=${saved.absPath} ms=${Date.now() - passStart}`,
       );
     }
 
@@ -511,6 +608,30 @@ export class GenerationsService {
     return saved.absPath;
   }
 
+  private async buildSpecialBackgroundReference1536x1024(args: {
+    generationId: string;
+    backgroundAbsPath: string;
+  }) {
+    const { generationId, backgroundAbsPath } = args;
+    // Purpose: provide a full-frame "layout reference" for the background that does not crop.
+    // This helps ensure all people in the background upload remain present after the edit.
+    const bytes = await sharp(backgroundAbsPath)
+      .rotate()
+      .resize(1536, 1024, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toBuffer();
+
+    const saved = await this.storage.saveTempIntermediateImage(
+      generationId,
+      'bg-ref-1536x1024',
+      bytes,
+    );
+    return saved.absPath;
+  }
+
   private async runImageEditOrThrow<T>(args: {
     generationId: string;
     passName: 'background' | 'text' | 'main';
@@ -523,6 +644,9 @@ export class GenerationsService {
     } catch (err: any) {
       const code = String(err?.code ?? err?.error?.code ?? '').trim();
       if (code === 'moderation_blocked' && retryOnModerationBlocked) {
+        this.logger.warn(
+          `special:moderationBlocked generationId=${generationId} pass=${passName} retryingWithFallbackPrompt=true`,
+        );
         try {
           return await retryOnModerationBlocked();
         } catch (retryErr: any) {
@@ -537,6 +661,18 @@ export class GenerationsService {
           '',
       ).trim();
       const msg = String(err?.error?.message ?? err?.message ?? '').trim();
+      this.logger.error(
+        [
+          'special:openaiError',
+          `generationId=${generationId}`,
+          `pass=${passName}`,
+          requestId ? `requestId=${requestId}` : null,
+          code ? `code=${code}` : null,
+          msg ? `message=${msg}` : null,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
       // Make the cause obvious in the API response.
       throw new BadRequestException(
         [

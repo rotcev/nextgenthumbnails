@@ -1,10 +1,24 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { randomUUID } from 'node:crypto';
+import { HttpLoggingInterceptor } from './common/http-logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
+  // Attach a request id for correlation across logs.
+  app.use((req: any, res: any, next: any) => {
+    const incoming =
+      typeof req?.headers?.['x-request-id'] === 'string'
+        ? req.headers['x-request-id'].trim()
+        : '';
+    const requestId = incoming || randomUUID();
+    req.requestId = requestId;
+    res.setHeader('x-request-id', requestId);
+    next();
+  });
+  app.useGlobalInterceptors(new HttpLoggingInterceptor());
   app.enableCors({
     origin: corsOrigins(),
     credentials: true,

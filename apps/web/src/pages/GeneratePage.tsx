@@ -5,6 +5,7 @@ import { apiGet, createGeneration, type Template } from "../lib/api";
 import { getTemplateFormSchema } from "../lib/templateForm";
 import { Button } from "../components/Button";
 import { Skeleton } from "../components/Skeleton";
+import { ImageDropzone } from "../components/ImageDropzone";
 
 export function GeneratePage() {
   const { templateId } = useParams();
@@ -98,7 +99,7 @@ export function GeneratePage() {
             ) : (
               <div className="grid gap-3">
                 {form.subjectSlots.map((s) => (
-                  <label key={s.id} className="grid gap-1">
+                  <div key={s.id} className="grid gap-1">
                     <div className="text-xs text-white/60">
                       {s.label}
                       {s.required ? " *" : ""}
@@ -106,18 +107,18 @@ export function GeneratePage() {
                     {s.helpText ? (
                       <div className="text-xs text-white/45">{s.helpText}</div>
                     ) : null}
-                    <input
-                      className="block w-full text-sm text-white/80 file:mr-4 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-white/15"
-                      type="file"
+                    <ImageDropzone
+                      value={subjectFilesBySlot[s.id] ?? null}
                       accept="image/png,image/jpeg,image/webp"
-                      onChange={(e) =>
+                      onChange={(file) =>
                         setSubjectFilesBySlot((prev) => ({
                           ...prev,
-                          [s.id]: e.target.files?.[0] ?? null,
+                          [s.id]: file,
                         }))
                       }
+                      placeholder="Drag & drop an image, or click to browse"
                     />
-                  </label>
+                  </div>
                 ))}
               </div>
             )}

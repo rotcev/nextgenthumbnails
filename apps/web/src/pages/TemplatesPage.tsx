@@ -5,6 +5,7 @@ import { apiGet, deleteTemplate, type Client, type Template, uploadTemplate } fr
 import { Button } from "../components/Button";
 import { Skeleton } from "../components/Skeleton";
 import { ClientsModal } from "../components/ClientsModal";
+import { ImageDropzone } from "../components/ImageDropzone";
 
 export function TemplatesPage() {
   const nav = useNavigate();
@@ -236,11 +237,11 @@ function UploadModal({
 
           <label className="grid gap-1">
             <div className="text-xs text-white/60">Template image</div>
-            <input
-              className="block w-full text-sm text-white/80 file:mr-4 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-white/15"
-              type="file"
+            <ImageDropzone
+              value={file}
+              onChange={setFile}
               accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              placeholder="Drag & drop a template image, or click to browse"
             />
           </label>
 

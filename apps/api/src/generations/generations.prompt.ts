@@ -282,7 +282,12 @@ export function buildSpecialBackgroundPassPrompt(args: {
   return [
     'SPECIAL TEMPLATE — BACKGROUND REPLACEMENT (MASKED):',
     '- You will ONLY modify pixels where the mask is fully transparent (alpha=0).',
-    '- Use Image #2 (background upload) to replace the entire BACKGROUND layer inside the masked region.',
+    '- BACKGROUND INPUTS:',
+    '- Image #2 is a full-frame, non-cropped layout reference of the background upload (use it to keep ALL people/objects present).',
+    '- Image #3 is the original background upload (use it for detail/texture).',
+    '- Use Images #2/#3 to replace the entire BACKGROUND layer inside the masked region.',
+    '- CRITICAL: if the background upload contains multiple people, you MUST keep ALL of them present in the result (no omissions).',
+    '- Do NOT crop out major sections of the background upload; if needed, scale the background down to fit everyone (overlap with the main subject is OK).',
     '- If the background upload contains people, preserve their natural appearance; do not add violence, weapons, injury, or any explicit content.',
     '- Preserve everything outside the mask EXACTLY (text styling/placement, arrow, borders, glow/stroke effects, and all overlays).',
     '- Maintain the template’s overall background feel including the orange gradient overlay if present.',

@@ -1,20 +1,20 @@
-import { Injectable } from "@nestjs/common";
-import OpenAI from "openai";
-import { createReadStream } from "node:fs";
-import { basename, extname } from "node:path";
-import { toFile } from "openai";
-import sharp from "sharp";
+import { Injectable } from '@nestjs/common';
+import OpenAI from 'openai';
+import { createReadStream } from 'node:fs';
+import { basename, extname } from 'node:path';
+import { toFile } from 'openai';
 
 type GenerateArgs = {
-  model: "gpt-image-1.5";
+  model: 'gpt-image-1.5';
   prompt: string;
   size: string;
-  quality: "low" | "medium" | "high";
-  inputFidelity: "low" | "high";
+  quality: 'low' | 'medium' | 'high';
+  inputFidelity: 'low' | 'high';
   templateImageAbsPath: string;
   subjectImageAbsPaths: string[];
-  outputFormat: "png" | "jpeg" | "webp";
-  moderation: "low" | "medium" | "high";
+  maskImageAbsPath?: string;
+  outputFormat: 'png' | 'jpeg' | 'webp';
+  moderation: 'low' | 'medium' | 'high';
 };
 
 @Injectable()
@@ -28,7 +28,7 @@ export class ImageGenerationService {
 
   async generateFromTemplate(args: GenerateArgs): Promise<Buffer> {
     if (!this.openai) {
-      throw new Error("OPENAI_API_KEY is not set");
+      throw new Error('OPENAI_API_KEY is not set');
     }
 
     // IMPORTANT: Use OpenAI's `toFile` helper so the SDK sends multipart parts with a filename
@@ -46,10 +46,20 @@ export class ImageGenerationService {
     );
 
     const images = [templateFile, ...subjectFiles];
+    const maskFile = args.maskImageAbsPath
+      ? await toFile(
+          createReadStream(args.maskImageAbsPath),
+          basename(args.maskImageAbsPath),
+          {
+            type: 'image/png',
+          },
+        )
+      : undefined;
 
     const res = await this.openai.images.edit({
       model: args.model,
       image: images as any,
+      ...(maskFile ? { mask: maskFile as any } : null),
       prompt: args.prompt,
       size: apiSize(args.size) as any,
       quality: args.quality as any,
@@ -59,11 +69,10 @@ export class ImageGenerationService {
 
     const b64 = (res.data?.[0] as any)?.b64_json as string | undefined;
     if (!b64) {
-      throw new Error("OpenAI did not return b64_json image data");
+      throw new Error('OpenAI did not return b64_json image data');
     }
 
-    const raw = Buffer.from(b64, "base64");
-    return await resizeToTarget(raw, args.size);
+    return Buffer.from(b64, 'base64');
   }
 }
 
@@ -71,41 +80,20 @@ function apiSize(target: string) {
   // OpenAI Images API supported sizes (per error message you saw):
   // '1024x1024', '1024x1536', '1536x1024', and 'auto'.
   //
-  // We ALWAYS want final output 1536x1080; we generate at the closest supported
-  // landscape size (1536x1024) then deterministically resize to 1536x1080.
-  if (target === "1536x1080") return "1536x1024";
-
-  if (target === "1024x1024") return "1024x1024";
-  if (target === "1024x1536") return "1024x1536";
-  if (target === "1536x1024") return "1536x1024";
+  if (target === '1024x1024') return '1024x1024';
+  if (target === '1024x1536') return '1024x1536';
+  if (target === '1536x1024') return '1536x1024';
 
   // For legacy/unknown sizes (e.g. 1280x720), pick a safe supported default.
   // Using 1536x1024 gives better fidelity for thumbnails than 1024x1024.
-  return "1536x1024";
-}
-
-async function resizeToTarget(bytes: Buffer, target: string) {
-  const match = /^(\d+)x(\d+)$/.exec(target);
-  if (!match) return bytes;
-
-  const width = Number(match[1]);
-  const height = Number(match[2]);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return bytes;
-  }
-
-  // Deterministic output size. `cover` keeps the image filled; templates should be authored for this.
-  // If we need strict no-crop later, we can switch to `contain` with background padding.
-  return await sharp(bytes).resize(width, height, { fit: "cover" }).png().toBuffer();
+  return '1536x1024';
 }
 
 function mimeFromPath(path: string) {
   const ext = extname(path).toLowerCase();
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".webp") return "image/webp";
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
   // Fail closed: OpenAI only accepts these for Images API uploads.
-  return "application/octet-stream";
+  return 'application/octet-stream';
 }
-
-

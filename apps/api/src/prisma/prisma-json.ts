@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from '@prisma/client';
 
 /**
  * Prisma has strict JSON input types. Our DTOs are plain objects, so we cast once
@@ -7,5 +7,3 @@ import { Prisma } from "@prisma/client";
 export function asPrismaJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
-
-

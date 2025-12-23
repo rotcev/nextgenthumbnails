@@ -44,6 +44,7 @@ model Template {
   clientId             String
   name                 String
   imageUrl             String?
+  isSpecial            Boolean  @default(false)
   config               Json
   reconstructionPrompt String?
   reconstructionSpec   Json?

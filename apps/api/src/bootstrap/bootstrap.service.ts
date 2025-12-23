@@ -1,6 +1,6 @@
-import { Injectable, OnApplicationBootstrap } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { DEFAULT_USER_ID } from "./bootstrap.constants";
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { DEFAULT_USER_ID } from './bootstrap.constants';
 
 @Injectable()
 export class BootstrapService implements OnApplicationBootstrap {
@@ -29,16 +29,14 @@ export class BootstrapService implements OnApplicationBootstrap {
     await this.prisma.client.create({
       data: {
         userId: DEFAULT_USER_ID,
-        name: "Default Client",
+        name: 'Default Client',
         defaults: {
-          outputSize: "1536x1080",
-          format: "png",
-          quality: "high",
-          inputFidelity: "high",
+          outputSize: '1536x1080',
+          format: 'png',
+          quality: 'high',
+          inputFidelity: 'high',
         },
       },
     });
   }
 }
-
-

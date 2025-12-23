@@ -1,5 +1,5 @@
-import { Global, Module } from "@nestjs/common";
-import { ImageGenerationService } from "./image-generation.service";
+import { Global, Module } from '@nestjs/common';
+import { ImageGenerationService } from './image-generation.service';
 
 @Global()
 @Module({
@@ -7,5 +7,3 @@ import { ImageGenerationService } from "./image-generation.service";
   exports: [ImageGenerationService],
 })
 export class ImageGenerationModule {}
-
-

@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
-import { DEFAULT_USER_ID } from "../bootstrap/bootstrap.constants";
-import { CreateClientDto } from "./dto/create-client.dto";
-import { UpdateClientDto } from "./dto/update-client.dto";
-import { asPrismaJson } from "../prisma/prisma-json";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { DEFAULT_USER_ID } from '../bootstrap/bootstrap.constants';
+import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
+import { asPrismaJson } from '../prisma/prisma-json';
 
 @Injectable()
 export class ClientsService {
@@ -12,7 +12,7 @@ export class ClientsService {
   async list() {
     return this.prisma.client.findMany({
       where: { userId: DEFAULT_USER_ID },
-      orderBy: { updatedAt: "desc" },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 
@@ -20,7 +20,7 @@ export class ClientsService {
     const client = await this.prisma.client.findFirst({
       where: { id, userId: DEFAULT_USER_ID },
     });
-    if (!client) throw new NotFoundException("Client not found");
+    if (!client) throw new NotFoundException('Client not found');
     return client;
   }
 
@@ -50,5 +50,3 @@ export class ClientsService {
     });
   }
 }
-
-

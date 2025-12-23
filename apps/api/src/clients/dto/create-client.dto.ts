@@ -1,6 +1,12 @@
-import { IsHexColor, IsOptional, IsString, MinLength, ValidateNested } from "class-validator";
-import { Type } from "class-transformer";
-import { ClientDefaultsDto } from "./client-defaults.dto";
+import {
+  IsHexColor,
+  IsOptional,
+  IsString,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ClientDefaultsDto } from './client-defaults.dto';
 
 export class CreateClientDto {
   @IsString()
@@ -19,5 +25,3 @@ export class CreateClientDto {
   @Type(() => ClientDefaultsDto)
   defaults!: ClientDefaultsDto;
 }
-
-

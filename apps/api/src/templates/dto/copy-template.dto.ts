@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength } from "class-validator";
+import { IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CopyTemplateDto {
   @IsString()
@@ -10,5 +10,3 @@ export class CopyTemplateDto {
   @MinLength(1)
   name?: string;
 }
-
-

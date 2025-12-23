@@ -13,32 +13,32 @@ import {
   UseInterceptors,
   UsePipes,
   ValidationPipe,
-} from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
-import { TemplatesService } from "./templates.service";
-import { CreateTemplateDto } from "./dto/create-template.dto";
-import { UpdateTemplateConfigDto } from "./dto/update-template-config.dto";
-import { CopyTemplateDto } from "./dto/copy-template.dto";
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { TemplatesService } from './templates.service';
+import { CreateTemplateDto } from './dto/create-template.dto';
+import { UpdateTemplateConfigDto } from './dto/update-template-config.dto';
+import { CopyTemplateDto } from './dto/copy-template.dto';
 
 @Controller()
 @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
 export class TemplatesController {
   constructor(private readonly templates: TemplatesService) {}
 
-  @Get("clients/:clientId/templates")
-  listByClient(@Param("clientId") clientId: string) {
+  @Get('clients/:clientId/templates')
+  listByClient(@Param('clientId') clientId: string) {
     return this.templates.listByClient(clientId);
   }
 
-  @Post("clients/:clientId/templates")
-  create(@Param("clientId") clientId: string, @Body() dto: CreateTemplateDto) {
+  @Post('clients/:clientId/templates')
+  create(@Param('clientId') clientId: string, @Body() dto: CreateTemplateDto) {
     return this.templates.create(clientId, dto);
   }
 
-  @Post("clients/:clientId/templates/upload")
-  @UseInterceptors(FileInterceptor("image"))
+  @Post('clients/:clientId/templates/upload')
+  @UseInterceptors(FileInterceptor('image'))
   uploadAndAnalyze(
-    @Param("clientId") clientId: string,
+    @Param('clientId') clientId: string,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -49,44 +49,52 @@ export class TemplatesController {
       }),
     )
     image: Express.Multer.File,
-    @Body("name") name?: string,
+    @Body('name') name?: string,
+    @Body('isSpecial') isSpecialRaw?: string,
   ) {
     return this.templates.uploadAndAnalyze(clientId, {
       name,
+      isSpecial: parseBool(isSpecialRaw),
       originalName: image.originalname,
       bytes: image.buffer,
     });
   }
 
-  @Get("templates/:id")
-  getById(@Param("id") id: string) {
+  @Get('templates/:id')
+  getById(@Param('id') id: string) {
     return this.templates.getById(id);
   }
 
-  @Put("templates/:id/config")
-  updateConfig(@Param("id") id: string, @Body() dto: UpdateTemplateConfigDto) {
+  @Put('templates/:id/config')
+  updateConfig(@Param('id') id: string, @Body() dto: UpdateTemplateConfigDto) {
     return this.templates.updateConfig(id, dto);
   }
 
-  @Post("templates/:id/copy")
-  copy(@Param("id") id: string, @Body() dto: CopyTemplateDto) {
+  @Post('templates/:id/copy')
+  copy(@Param('id') id: string, @Body() dto: CopyTemplateDto) {
     return this.templates.copy(id, dto);
   }
 
-  @Delete("templates/:id")
-  archive(@Param("id") id: string) {
+  @Delete('templates/:id')
+  archive(@Param('id') id: string) {
     return this.templates.archive(id);
   }
 
-  @Post("templates/:id/rebuild-inputs")
-  rebuildInputs(@Param("id") id: string) {
+  @Post('templates/:id/rebuild-inputs')
+  rebuildInputs(@Param('id') id: string) {
     return this.templates.rebuildInputsFromReconstructionSpec(id);
   }
 
-  @Post("templates/:id/reanalyze")
-  reanalyze(@Param("id") id: string) {
+  @Post('templates/:id/reanalyze')
+  reanalyze(@Param('id') id: string) {
     return this.templates.reanalyze(id);
   }
 }
 
-
+function parseBool(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}

@@ -1,9 +1,18 @@
-import { Body, Controller, Get, Param, Post, Put, UsePipes, ValidationPipe } from "@nestjs/common";
-import { ClientsService } from "./clients.service";
-import { CreateClientDto } from "./dto/create-client.dto";
-import { UpdateClientDto } from "./dto/update-client.dto";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import { ClientsService } from './clients.service';
+import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
 
-@Controller("clients")
+@Controller('clients')
 @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
 export class ClientsController {
   constructor(private readonly clients: ClientsService) {}
@@ -18,15 +27,13 @@ export class ClientsController {
     return this.clients.create(dto);
   }
 
-  @Get(":id")
-  getById(@Param("id") id: string) {
+  @Get(':id')
+  getById(@Param('id') id: string) {
     return this.clients.getById(id);
   }
 
-  @Put(":id")
-  update(@Param("id") id: string, @Body() dto: UpdateClientDto) {
+  @Put(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
     return this.clients.update(id, dto);
   }
 }
-
-

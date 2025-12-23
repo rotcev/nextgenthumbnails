@@ -1,6 +1,6 @@
-import { Module } from "@nestjs/common";
-import { ClientsController } from "./clients.controller";
-import { ClientsService } from "./clients.service";
+import { Module } from '@nestjs/common';
+import { ClientsController } from './clients.controller';
+import { ClientsService } from './clients.service';
 
 @Module({
   controllers: [ClientsController],
@@ -8,5 +8,3 @@ import { ClientsService } from "./clients.service";
   exports: [ClientsService],
 })
 export class ClientsModule {}
-
-

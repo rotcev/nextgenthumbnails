@@ -37,6 +37,7 @@ export type Template = {
   clientId: string;
   name: string;
   imageUrl: string | null;
+  isSpecial: boolean;
   reconstructionPrompt: string | null;
   reconstructionSpec: unknown | null;
   outputSize: string;
@@ -82,10 +83,12 @@ export async function uploadTemplate(
   clientId: string,
   name: string,
   file: File,
+  opts?: { isSpecial?: boolean },
 ): Promise<Template> {
   const form = new FormData();
   form.append("name", name);
   form.append("image", file);
+  if (opts?.isSpecial) form.append("isSpecial", "true");
 
   const res = await fetch(`${API_URL}/clients/${clientId}/templates/upload`, {
     method: "POST",

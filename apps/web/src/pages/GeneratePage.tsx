@@ -233,10 +233,10 @@ export function GeneratePage() {
                 <Skeleton className="h-full w-full" />
               </div>
             ) : outputUrl ? (
-              <img className="h-full w-full object-cover" src={outputUrl} alt="Generated thumbnail" />
+              <img className="h-full w-full object-contain" src={outputUrl} alt="Generated thumbnail" />
             ) : template?.imageUrl ? (
               <img
-                className="h-full w-full object-cover opacity-80"
+                className="h-full w-full object-contain opacity-80"
                 src={`${apiBase}${template.imageUrl}`}
                 alt="Template preview"
               />

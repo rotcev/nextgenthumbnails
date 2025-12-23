@@ -1,5 +1,5 @@
-import { Global, Module } from "@nestjs/common";
-import { TemplateAnalysisService } from "./template-analysis.service";
+import { Global, Module } from '@nestjs/common';
+import { TemplateAnalysisService } from './template-analysis.service';
 
 @Global()
 @Module({
@@ -7,5 +7,3 @@ import { TemplateAnalysisService } from "./template-analysis.service";
   exports: [TemplateAnalysisService],
 })
 export class TemplateAnalysisModule {}
-
-

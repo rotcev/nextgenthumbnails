@@ -1,5 +1,5 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { PrismaClient } from "@prisma/client";
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService
@@ -9,7 +9,7 @@ export class PrismaService
   constructor() {
     const url =
       process.env.DATABASE_URL ??
-      "postgresql://postgres@localhost:5432/pimpgen?schema=public";
+      'postgresql://postgres@localhost:5432/pimpgen?schema=public';
 
     super({
       datasources: {
@@ -26,5 +26,3 @@ export class PrismaService
     await this.$disconnect();
   }
 }
-
-

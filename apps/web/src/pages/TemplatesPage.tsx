@@ -31,9 +31,9 @@ export function TemplatesPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isClientsOpen, setIsClientsOpen] = useState(false);
   const uploadMutation = useMutation({
-    mutationFn: async ({ name, file }: { name: string; file: File }) => {
+    mutationFn: async ({ name, file, isSpecial }: { name: string; file: File; isSpecial: boolean }) => {
       if (!clientId) throw new Error("No client selected");
-      return uploadTemplate(clientId, name, file);
+      return uploadTemplate(clientId, name, file, { isSpecial });
     },
     onSuccess: async () => {
       setIsUploadOpen(false);
@@ -120,7 +120,14 @@ export function TemplatesPage() {
                 </div>
                 <div className="mt-3 flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold">{t.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold">{t.name}</div>
+                      {t.isSpecial ? (
+                        <div className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                          Special
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="mt-1 text-xs text-white/50">
                       {t.reconstructionPrompt ? "Analyzed" : "Needs analysis"}
                     </div>
@@ -167,7 +174,7 @@ export function TemplatesPage() {
       {isUploadOpen ? (
         <UploadModal
           onClose={() => setIsUploadOpen(false)}
-          onSubmit={(name, file) => uploadMutation.mutate({ name, file })}
+          onSubmit={(name, file, isSpecial) => uploadMutation.mutate({ name, file, isSpecial })}
           isLoading={uploadMutation.isPending}
           error={uploadMutation.error ? String(uploadMutation.error) : null}
         />
@@ -190,12 +197,13 @@ function UploadModal({
   error,
 }: {
   onClose: () => void;
-  onSubmit: (name: string, file: File) => void;
+  onSubmit: (name: string, file: File, isSpecial: boolean) => void;
   isLoading: boolean;
   error: string | null;
 }) {
   const [name, setName] = useState("New Template");
   const [file, setFile] = useState<File | null>(null);
+  const [isSpecial, setIsSpecial] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
@@ -236,6 +244,22 @@ function UploadModal({
             />
           </label>
 
+          <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+            <input
+              className="mt-1"
+              type="checkbox"
+              checked={isSpecial}
+              onChange={(e) => setIsSpecial(e.target.checked)}
+            />
+            <div className="grid gap-1">
+              <div className="text-sm font-medium text-white/90">Special template</div>
+              <div className="text-xs text-white/60">
+                Uses one <span className="text-white/80">background</span> image + one{" "}
+                <span className="text-white/80">main subject</span> image + text.
+              </div>
+            </div>
+          </label>
+
           {error ? <div className="text-xs text-red-300">{error}</div> : null}
         </div>
 
@@ -247,7 +271,7 @@ function UploadModal({
             isLoading={isLoading}
             onClick={() => {
               if (!file) return;
-              onSubmit(name.trim() || "New Template", file);
+              onSubmit(name.trim() || "New Template", file, isSpecial);
             }}
           >
             Upload & analyze

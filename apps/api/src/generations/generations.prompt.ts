@@ -316,6 +316,92 @@ export function buildSpecialMainPassPrompt(args: {
   ].join('\n');
 }
 
+export function buildSpecialCompositePassPrompt(args: {
+  template: Template;
+  userNotes?: string | null;
+  hasBackground: boolean;
+  hasMain: boolean;
+}) {
+  const { template, userNotes, hasBackground, hasMain } = args;
+  const notes = userNotes?.trim() ? userNotes.trim() : null;
+
+  // Image ordering is determined by the service. Keep this prompt aligned with that order:
+  // - Image #1: current base (template or prior pass)
+  // - If hasBackground:
+  //   - Image #2: bg full-frame layout reference (non-cropped)
+  //   - Image #3: bg original upload (detail/texture)
+  // - If hasMain:
+  //   - Next image: main subject upload
+  const bgSection = hasBackground
+    ? [
+        'BACKGROUND REPLACEMENT:',
+        '- Replace the entire BACKGROUND inside the masked region using the background inputs.',
+        '- CRITICAL: if the background upload contains multiple people, you MUST keep ALL of them present in the result (no omissions).',
+        '- CRITICAL: do NOT "simplify" the background by deleting people/objects. You must preserve the full set of meaningful subjects from the background upload.',
+        '- CRITICAL: do NOT duplicate/clone/copy any background person. Each person from the background upload should appear exactly once (no extra copies, no mirrored duplicates).',
+        '- Do NOT add any new people that were not in the background upload.',
+        '- Do NOT crop out major sections of the background upload; if needed, scale the background down to fit everyone (overlap with the main subject is OK).',
+        '- Maintain the template’s overall background feel including the orange gradient overlay if present.',
+      ]
+    : [];
+
+  const mainSection = hasMain
+    ? [
+        'MAIN SUBJECT REPLACEMENT:',
+        '- Replace the main subject inside the masked region using the main subject upload as the ONLY source of identity/appearance.',
+        '- Remove the original template main subject entirely (no leftover face/hair/hands).',
+        '- Make the main subject significantly larger and more prominent within the masked region: zoom in, with the head taking up the majority of the available space (natural proportions).',
+        '- IMPORTANT: do NOT significantly cover or obscure any overlay text. A little overlap is OK, but you must keep every letter/glyph fully readable (no letters cut off). If needed, reposition the main subject and/or scale down slightly to keep text clear.',
+        ...(hasBackground
+          ? [
+              '- IMPORTANT COMPOSITING RULE: the background upload is the base layer. Place the main subject on top WITHOUT deleting or fully covering important background subjects.',
+              '- Some overlap is OK, but you must NOT fully occlude any background person (or other important subject matter). If needed, adjust main subject position and/or scale down slightly to keep all background people clearly visible.',
+              '- Do NOT use the main-subject edit to erase background people/objects; only the pixels that are genuinely occupied by the main subject should cover the background.',
+            ]
+          : []),
+      ]
+    : [];
+
+  const inputImages = [
+    'INPUT IMAGES (ORDER IS IMPORTANT):',
+    '- Image #1 is the base canvas (template or prior pass).',
+    ...(hasBackground
+      ? [
+          '- Image #2 is a full-frame, non-cropped layout reference of the background upload (use it to keep ALL people/objects present).',
+          '- Image #3 is the original background upload (use it for detail/texture).',
+        ]
+      : []),
+    ...(hasMain
+      ? [
+          `- Image #${hasBackground ? 4 : 2} is the main subject upload (identity source).`,
+        ]
+      : []),
+  ].join('\n');
+
+  return [
+    'SPECIAL TEMPLATE — COMPOSITE REPLACEMENT (MASKED):',
+    '- You will ONLY modify pixels where the mask is fully transparent (alpha=0).',
+    inputImages,
+    '',
+    ...(bgSection.length ? [...bgSection, ''] : []),
+    ...(mainSection.length ? [...mainSection, ''] : []),
+    'GLOBAL CONSTRAINTS:',
+    '- Preserve everything outside the mask EXACTLY (text styling/placement, arrow, borders, glow/stroke effects, and all overlays).',
+    '- Treat ALL overlays (especially headline text) as untouchable, even if the mask accidentally includes them: do not paint over them and do not make them less readable.',
+    '- If you were not given a background upload, do NOT change the background.',
+    '- If you were not given a main subject upload, do NOT change the main subject.',
+    ...(hasBackground
+      ? [
+          '- BACKGROUND PRESERVATION CHECK: all meaningful people/subjects from the background upload must still be present in the final result. Do not omit anyone.',
+          '- BACKGROUND UNIQUENESS CHECK: no person from the background upload may appear more than once. No cloning/duplication.',
+        ]
+      : []),
+    ...(notes ? ['', `USER NOTES (MINOR ONLY): ${JSON.stringify(notes)}`] : []),
+    '',
+    `TemplateId=${template.id}`,
+  ].join('\n');
+}
+
 export function buildSpecialChangeTextPrompt(args: {
   template: Template;
   line1: string;

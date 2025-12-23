@@ -21,8 +21,7 @@ import { StorageService } from '../storage/storage.service';
 import { ImageGenerationService } from '../image-generation/image-generation.service';
 import {
   buildGenerationPrompt,
-  buildSpecialBackgroundPassPrompt,
-  buildSpecialMainPassPrompt,
+  buildSpecialCompositePassPrompt,
   buildSpecialChangeTextPrompt,
 } from './generations.prompt';
 import sharp from 'sharp';
@@ -363,49 +362,67 @@ export class GenerationsService {
     const availableLabels = normalizedPolygons.map((p) => p.label);
 
     // PASS ORDER (SIMPLE + DETERMINISTIC):
-    // - background -> main -> final \"Change the text to\" pass
+    // - (background+main) composite -> final \"Change the text to\" pass
     // This mirrors the workflow that worked well in the ChatGPT app.
 
-    // 1) Background pass
-    if (bgAbs && availableLabels.includes('background')) {
+    // 1) Composite pass: background + main in one masked edit call (big cost saver)
+    const runComposite =
+      (bgAbs && availableLabels.includes('background')) ||
+      (mainAbs && availableLabels.includes('main'));
+    if (runComposite) {
       const passStart = Date.now();
-      this.logger.log(`special:passStart generationId=${generationId} pass=background`);
-      const bgRefAbs = await this.buildSpecialBackgroundReference1536x1024({
-        generationId,
-        backgroundAbsPath: bgAbs,
-      });
+      this.logger.log(
+        `special:passStart generationId=${generationId} pass=composite`,
+      );
+
+      const hasBackground = Boolean(bgAbs && availableLabels.includes('background'));
+      const hasMain = Boolean(mainAbs && availableLabels.includes('main'));
+
+      const bgRefAbs = hasBackground
+        ? await this.buildSpecialBackgroundReference1536x1024({
+            generationId,
+            backgroundAbsPath: bgAbs!,
+          })
+        : null;
       const { width, height } =
         await readImageDimensionsOrThrow(currentBaseAbsPath);
       const maskBytes = await buildEditMaskPng({
         width,
         height,
         polygons: normalizedPolygons,
-        includeLabel: (label) => label === 'background',
+        includeLabel: (label) =>
+          (hasBackground && label === 'background') ||
+          (hasMain && label === 'main'),
       });
       const savedMask = await this.storage.saveTempIntermediateImage(
         generationId,
-        'mask-background',
+        'mask-composite',
         maskBytes,
       );
       this.logger.log(
-        `special:maskSaved generationId=${generationId} pass=background absPath=${savedMask.absPath}`,
+        `special:maskSaved generationId=${generationId} pass=composite absPath=${savedMask.absPath}`,
       );
-      const prompt = buildSpecialBackgroundPassPrompt({ template, userNotes });
-      const fallbackPrompt = buildSpecialBackgroundPassPrompt({
+      const prompt = buildSpecialCompositePassPrompt({
         template,
-        userNotes: null,
+        userNotes,
+        hasBackground,
+        hasMain,
       });
       await this.storage.saveTempIntermediateText(
         generationId,
-        'prompt-background',
+        'prompt-composite',
         prompt,
       );
-      await this.storage.saveTempIntermediateText(
-        generationId,
-        'prompt-background-fallback',
-        fallbackPrompt,
-      );
+
+      // Keep subject images order aligned with buildSpecialCompositePassPrompt():
+      // - if background: [bgRef, bgOriginal]
+      // - if main: [..., main]
+      const subjectImageAbsPaths: string[] = [];
+      if (hasBackground) subjectImageAbsPaths.push(bgRefAbs!, bgAbs!);
+      if (hasMain) subjectImageAbsPaths.push(mainAbs!);
+
       currentBytes = await this.runImageEditOrThrow({
+        // Reuse the existing error taxonomy for "background" so we don't have to widen unions/log filters.
         passName: 'background',
         generationId,
         fn: () =>
@@ -416,20 +433,7 @@ export class GenerationsService {
             quality: 'high',
             inputFidelity: 'high',
             templateImageAbsPath: currentBaseAbsPath,
-            subjectImageAbsPaths: [bgRefAbs, bgAbs],
-            maskImageAbsPath: savedMask.absPath,
-            outputFormat,
-            moderation: 'low',
-          }),
-        retryOnModerationBlocked: () =>
-          this.images.generateFromTemplate({
-            model: 'gpt-image-1.5',
-            prompt: fallbackPrompt,
-            size: '1536x1024',
-            quality: 'high',
-            inputFidelity: 'high',
-            templateImageAbsPath: currentBaseAbsPath,
-            subjectImageAbsPaths: [bgRefAbs, bgAbs],
+            subjectImageAbsPaths,
             maskImageAbsPath: savedMask.absPath,
             outputFormat,
             moderation: 'low',
@@ -437,92 +441,16 @@ export class GenerationsService {
       });
       const saved = await this.storage.saveTempIntermediateImage(
         generationId,
-        'pass-1-background',
+        'pass-1-composite',
         currentBytes,
       );
       this.logger.log(
-        `special:passEnd generationId=${generationId} pass=background absPath=${saved.absPath} ms=${Date.now() - passStart}`,
+        `special:passEnd generationId=${generationId} pass=composite absPath=${saved.absPath} ms=${Date.now() - passStart}`,
       );
       currentBaseAbsPath = saved.absPath;
     }
 
-    // 2) Main subject pass
-    if (mainAbs && availableLabels.includes('main')) {
-      const passStart = Date.now();
-      this.logger.log(`special:passStart generationId=${generationId} pass=main`);
-      const { width, height } =
-        await readImageDimensionsOrThrow(currentBaseAbsPath);
-      const maskBytes = await buildEditMaskPng({
-        width,
-        height,
-        polygons: normalizedPolygons,
-        includeLabel: (label) => label === 'main',
-      });
-      const savedMask = await this.storage.saveTempIntermediateImage(
-        generationId,
-        'mask-main',
-        maskBytes,
-      );
-      this.logger.log(
-        `special:maskSaved generationId=${generationId} pass=main absPath=${savedMask.absPath}`,
-      );
-      const prompt = buildSpecialMainPassPrompt({ template, userNotes });
-      const fallbackPrompt = buildSpecialMainPassPrompt({
-        template,
-        userNotes: null,
-      });
-      await this.storage.saveTempIntermediateText(
-        generationId,
-        'prompt-main',
-        prompt,
-      );
-      await this.storage.saveTempIntermediateText(
-        generationId,
-        'prompt-main-fallback',
-        fallbackPrompt,
-      );
-      currentBytes = await this.runImageEditOrThrow({
-        passName: 'main',
-        generationId,
-        fn: () =>
-          this.images.generateFromTemplate({
-            model: 'gpt-image-1.5',
-            prompt,
-            size: '1536x1024',
-            quality: 'high',
-            inputFidelity: 'high',
-            templateImageAbsPath: currentBaseAbsPath,
-            subjectImageAbsPaths: [mainAbs],
-            maskImageAbsPath: savedMask.absPath,
-            outputFormat,
-            moderation: 'low',
-          }),
-        retryOnModerationBlocked: () =>
-          this.images.generateFromTemplate({
-            model: 'gpt-image-1.5',
-            prompt: fallbackPrompt,
-            size: '1536x1024',
-            quality: 'high',
-            inputFidelity: 'high',
-            templateImageAbsPath: currentBaseAbsPath,
-            subjectImageAbsPaths: [mainAbs],
-            maskImageAbsPath: savedMask.absPath,
-            outputFormat,
-            moderation: 'low',
-          }),
-      });
-      const saved = await this.storage.saveTempIntermediateImage(
-        generationId,
-        'pass-2-main',
-        currentBytes,
-      );
-      this.logger.log(
-        `special:passEnd generationId=${generationId} pass=main absPath=${saved.absPath} ms=${Date.now() - passStart}`,
-      );
-      currentBaseAbsPath = saved.absPath;
-    }
-
-    // 3) Final text pass: \"Change the text to\" (single `text` polygon recommended; auto fallback if none)
+    // 2) Final text pass: \"Change the text to\" (single `text` polygon recommended; auto fallback if none)
     if (texts.length) {
       const passStart = Date.now();
       this.logger.log(`special:passStart generationId=${generationId} pass=text`);
@@ -636,24 +564,12 @@ export class GenerationsService {
     generationId: string;
     passName: 'background' | 'text' | 'main';
     fn: () => Promise<T>;
-    retryOnModerationBlocked?: () => Promise<T>;
   }): Promise<T> {
-    const { generationId, passName, fn, retryOnModerationBlocked } = args;
+    const { generationId, passName, fn } = args;
     try {
       return await fn();
     } catch (err: any) {
       const code = String(err?.code ?? err?.error?.code ?? '').trim();
-      if (code === 'moderation_blocked' && retryOnModerationBlocked) {
-        this.logger.warn(
-          `special:moderationBlocked generationId=${generationId} pass=${passName} retryingWithFallbackPrompt=true`,
-        );
-        try {
-          return await retryOnModerationBlocked();
-        } catch (retryErr: any) {
-          // Fall through and throw the most actionable details from the retry attempt.
-          err = retryErr;
-        }
-      }
       const requestId = String(
         err?.requestID ??
           err?.error?.requestID ??

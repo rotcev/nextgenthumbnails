@@ -7,6 +7,24 @@
 // This file intentionally consumes untyped JSON from Template.config / reconstructionSpec.
 import type { Template } from '@prisma/client';
 
+function buildLightingPromptSection() {
+  return [
+    'LIGHTING (CRITICAL — LIGHTING ONLY):',
+    '- The final thumbnail MUST have strong HDR-style lighting across the entire image.',
+    '- Apply an HDR / high-dynamic-range look: bright punchy highlights, deep clean shadows, and strong micro-contrast (local contrast) without muddy midtones.',
+    '- Treat the finish as if it was professionally touched up using a Camera Raw / Adobe Camera Raw filter over the whole image.',
+    '- Camera Raw-style adjustments to emulate:',
+    '  - Highlights: controlled/rolled-off but still crisp and bright (avoid blown-out faces).',
+    '  - Shadows: lifted enough to keep detail, but still deep for drama (avoid flat lighting).',
+    '  - Whites/Blacks: expanded dynamic range (true whites + true blacks).',
+    '  - Clarity/Texture: increased for crisp “HD” detail.',
+    '  - Sharpening: increased edge definition (clean, not gritty/noisy).',
+    '  - Saturation/Vibrance: increased moderately for a vivid thumbnail look.',
+    '  - Reds/Oranges: emphasize richness/saturation where present (thumbnail pop).',
+    '- Keep lighting direction plausible and consistent; add subtle rim/key-light separation so subjects pop from the background.',
+  ].join('\n');
+}
+
 export function buildGenerationPrompt(args: {
   template: Template;
   reconstructionPrompt: string | null;
@@ -242,9 +260,10 @@ export function buildGenerationPrompt(args: {
     '- Ensure the arrow does not overlap or obscure any text.',
   ].join('\n');
 
+  const lightingSection = buildLightingPromptSection();
+
   const globalConstraints = [
     'GLOBAL HARD CONSTRAINTS:',
-    '- Apply HDR lighting and HDR-style micro-contrast consistently across the entire image (subjects, text, and background).',
     ...(isSpecial
       ? [
           '- This is a SPECIAL TEMPLATE: background may be replaced ONLY if the background slot image is provided.',
@@ -269,50 +288,9 @@ export function buildGenerationPrompt(args: {
     ...(userNotesSection ? [userNotesSection, ''] : []),
     textSection,
     '',
+    lightingSection,
+    '',
     globalConstraints,
-  ].join('\n');
-}
-
-export function buildSpecialBackgroundPassPrompt(args: {
-  template: Template;
-  userNotes?: string | null;
-}) {
-  const { template, userNotes } = args;
-  const notes = userNotes?.trim() ? userNotes.trim() : null;
-  return [
-    'SPECIAL TEMPLATE — BACKGROUND REPLACEMENT (MASKED):',
-    '- You will ONLY modify pixels where the mask is fully transparent (alpha=0).',
-    '- BACKGROUND INPUTS:',
-    '- Image #2 is a full-frame, non-cropped layout reference of the background upload (use it to keep ALL people/objects present).',
-    '- Image #3 is the original background upload (use it for detail/texture).',
-    '- Use Images #2/#3 to replace the entire BACKGROUND layer inside the masked region.',
-    '- CRITICAL: if the background upload contains multiple people, you MUST keep ALL of them present in the result (no omissions).',
-    '- Do NOT crop out major sections of the background upload; if needed, scale the background down to fit everyone (overlap with the main subject is OK).',
-    '- If the background upload contains people, preserve their natural appearance; do not add violence, weapons, injury, or any explicit content.',
-    '- Preserve everything outside the mask EXACTLY (text styling/placement, arrow, borders, glow/stroke effects, and all overlays).',
-    '- Maintain the template’s overall background feel including the orange gradient overlay if present.',
-    ...(notes ? ['', `USER NOTES (MINOR ONLY): ${JSON.stringify(notes)}`] : []),
-    '',
-    `TemplateId=${template.id}`,
-  ].join('\n');
-}
-
-export function buildSpecialMainPassPrompt(args: {
-  template: Template;
-  userNotes?: string | null;
-}) {
-  const { template, userNotes } = args;
-  const notes = userNotes?.trim() ? userNotes.trim() : null;
-  return [
-    'SPECIAL TEMPLATE — MAIN SUBJECT REPLACEMENT (MASKED):',
-    '- You will ONLY modify pixels where the mask is fully transparent (alpha=0).',
-    '- Use Image #2 (main subject upload) as the ONLY source of identity/appearance for the main subject inside the masked region.',
-    '- Remove the original template main subject entirely (no leftover face/hair/hands).',
-    '- Make the main subject significantly larger and more prominent within the masked region: zoom in, with the head taking up the majority of the available space (natural proportions).',
-    '- Preserve EVERYTHING outside the mask exactly, including whatever text is already present.',
-    ...(notes ? ['', `USER NOTES (MINOR ONLY): ${JSON.stringify(notes)}`] : []),
-    '',
-    `TemplateId=${template.id}`,
   ].join('\n');
 }
 
@@ -324,6 +302,7 @@ export function buildSpecialCompositePassPrompt(args: {
 }) {
   const { template, userNotes, hasBackground, hasMain } = args;
   const notes = userNotes?.trim() ? userNotes.trim() : null;
+  const lightingSection = buildLightingPromptSection();
 
   // Image ordering is determined by the service. Keep this prompt aligned with that order:
   // - Image #1: current base (template or prior pass)
@@ -385,6 +364,8 @@ export function buildSpecialCompositePassPrompt(args: {
     '',
     ...(bgSection.length ? [...bgSection, ''] : []),
     ...(mainSection.length ? [...mainSection, ''] : []),
+    lightingSection,
+    '',
     'GLOBAL CONSTRAINTS:',
     '- Preserve everything outside the mask EXACTLY (text styling/placement, arrow, borders, glow/stroke effects, and all overlays).',
     '- Treat ALL overlays (especially headline text) as untouchable, even if the mask accidentally includes them: do not paint over them and do not make them less readable.',
